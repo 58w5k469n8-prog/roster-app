@@ -143,6 +143,14 @@ th{color:var(--gold);font-weight:700;}
 .rt-table td.rt-team{background:#b9c3cd;font-weight:700;}
 .rt-table td.rt-op{font-weight:700;}
 .rt-table td.rt-crane{font-weight:800;color:#155724;}
+.print-wrap{background:#fff;border-radius:10px;padding:14px;}
+.print-tbt{border:2px solid #C9A100;background:#FFF6D6;color:#3a2e00;border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+.print-tbt h4{margin:0 0 6px 0;color:#8a6d00;font-size:1rem;font-family:Arial,"SF Arabic",sans-serif;}
+.print-tbt p{margin:0;white-space:pre-wrap;font-size:.9rem;line-height:1.5;font-family:Arial,"SF Arabic",sans-serif;}
+.print-tasks{border:2px solid #2e7d32;background:#EAF6EA;color:#1b3a1b;border-radius:10px;padding:12px 14px;margin-top:12px;}
+.print-tasks h4{margin:0 0 8px 0;color:#2e7d32;font-size:1rem;font-family:Arial,"SF Arabic",sans-serif;}
+.print-task-row{display:flex;justify-content:space-between;gap:10px;padding:6px 4px;border-bottom:1px dashed #b7d8b7;font-size:.85rem;font-family:Arial,"SF Arabic",sans-serif;}
+.print-task-row:last-child{border-bottom:none;}
 ::-webkit-scrollbar{width:8px;}
 ::-webkit-scrollbar-thumb{background:rgba(255,214,10,0.3);border-radius:10px;}
 </style>
@@ -182,6 +190,7 @@ function blankState(email,name){
     vessels:[],
     leaves:[],
     handovers:[],
+    handoverVessels:[],
     rosterDates:{},
     logs:[],
     geminiApiKey:''
@@ -475,13 +484,25 @@ function viewLeaves(){
   <div id="captureArea">
   <h1>الإجازات</h1>
   <div class="card">
-    <h3>إضافة إجازة</h3>
-    <div class="g3">
+    <h3>إضافة إجازة / غياب</h3>
+    <div class="g4">
       <div class="field"><label>الاسم</label>
         <select id="lvName"><option value="">اختر ونّاش</option>${state.crew.operators.map(o=>`<option value="${esc(o.name)}">${esc(o.name)}</option>`).join('')}</select>
       </div>
+      <div class="field"><label>النوع</label>
+        <select id="lvType" onchange="document.getElementById('lvTypeOtherWrap').style.display = this.value==='أخرى' ? 'block' : 'none'">
+          <option value="إجازة">إجازة</option>
+          <option value="إذن">إذن</option>
+          <option value="مأمورية">مأمورية</option>
+          <option value="كورس">كورس</option>
+          <option value="أخرى">أخرى (اكتب يدوي)</option>
+        </select>
+      </div>
       <div class="field"><label>من تاريخ</label><input id="lvFrom" type="date"></div>
       <div class="field"><label>إلى تاريخ</label><input id="lvTo" type="date"></div>
+    </div>
+    <div class="field" id="lvTypeOtherWrap" style="display:none;max-width:320px;">
+      <label>اكتب نوع الغياب</label><input id="lvTypeOther" placeholder="مثال: انتداب">
     </div>
     <button class="btn-gold" onclick="addLeave()">إضافة</button>
   </div>
@@ -492,7 +513,10 @@ function renderLeaves(){
   if(!state.leaves.length) return `<div class="empty muted">لا توجد إجازات مسجلة</div>`;
   return state.leaves.map(l=>`
     <div class="list-item">
-      <div><b>${esc(l.name)}</b> <span class="muted">من ${l.from} إلى ${l.to}</span></div>
+      <div class="row">
+        <span class="pill pill-B">${esc(l.type||'إجازة')}</span>
+        <b>${esc(l.name)}</b> <span class="muted">من ${l.from} إلى ${l.to}</span>
+      </div>
       <div class="row">
         <button class="btn-danger btn-sm" onclick="deleteLeave('${l.id}')">حذف</button>
       </div>
@@ -500,10 +524,16 @@ function renderLeaves(){
 }
 function addLeave(){
   const name = document.getElementById('lvName').value;
+  let type = document.getElementById('lvType').value;
+  const typeOther = document.getElementById('lvTypeOther').value.trim();
   const from = document.getElementById('lvFrom').value;
   const to = document.getElementById('lvTo').value;
   if(!name||!from||!to) { alert('من فضلك أكمل كل الحقول'); return; }
-  const l = {id:uid(), name, from, to};
+  if(type==='أخرى'){
+    if(!typeOther){ alert('من فضلك اكتب نوع الغياب'); return; }
+    type = typeOther;
+  }
+  const l = {id:uid(), name, type, from, to};
   state.leaves.push(l);
   log('إجازة','إضافة',null,l);
   saveState(); renderTab();
@@ -574,7 +604,7 @@ function viewRoster(){
     <h3 style="margin:0;">جدول الروستر (نموذج الطباعة/المشاركة)</h3>
     <button class="btn-gold btn-sm" onclick="shareRosterTable('${date}')">📤 مشاركة الجدول كصورة</button>
   </div>
-  ${buildRosterTableHTML(date)}
+  ${buildRosterPrintBundleHTML(date)}
 
   <!-- قائمة المهام الأخرى — في آخر صفحة الروستر كما طلبت -->
   <div class="tbt-box" style="border-color: rgba(61,220,132,0.4); background: rgba(61,220,132,0.02); margin-top:18px;">
@@ -762,7 +792,7 @@ function removeCrane(date,vId,crId){
 function buildRosterTableHTML(date){
   const roster = getRoster(date);
   const rows = [];
-  
+
   roster.vessels.forEach(rv=>{
     rv.cranes.forEach(cr=>{
       const loaderTxt = cr.equipment.filter(e=>e.type==='loader').map(e=>e.label.replace('لودر ','')).join(' / ') || '-';
@@ -780,35 +810,21 @@ function buildRosterTableHTML(date){
     });
   });
 
-  // إضافة المهام الأخرى لجدول الطباعة
-  if(roster.otherTasks) {
-    roster.otherTasks.forEach(t => {
-      const op = state.crew.operators.find(o => o.id === t.opId);
-      rows.push({
-        vessel: `[${t.type}]`,
-        loader: '-',
-        hold: '-',
-        ops: op ? op.name : '-',
-        crane: t.craneNum
-      });
-    });
-  }
-
   if(!rows.length){
-    return `<div class="empty muted" id="rosterTableCapture">لا توجد بيانات كافية لعرض الجدول بعد (أضف ونش واحد أو مهمة على الأقل)</div>`;
+    return `<div class="empty muted">لا توجد بيانات كافية لعرض جدول التقسيمة بعد (أضف ونش واحد على الأقل)</div>`;
   }
 
   const teamLabel = esc(state.shiftName||'');
   return `
   <div style="overflow-x:auto;border-radius:10px;">
-    <table class="rt-table" id="rosterTableCapture">
+    <table class="rt-table">
       <thead>
         <tr>
           <th class="rt-team" rowspan="2">تقسيمة الوناشة</th>
           <th class="rt-title" colspan="5">Crane Operator Shift Roster</th>
         </tr>
         <tr>
-          <th>المركب / المهمة<br><span class="rt-en">Vessel / Task</span></th>
+          <th>المركب<br><span class="rt-en">Vessel</span></th>
           <th>Loader</th>
           <th>Hold</th>
           <th>Crane Operator</th>
@@ -827,6 +843,33 @@ function buildRosterTableHTML(date){
           </tr>`).join('')}
       </tbody>
     </table>
+  </div>`;
+}
+function buildOtherTasksPrintHTML(date){
+  const roster = getRoster(date);
+  const tasks = roster.otherTasks||[];
+  if(!tasks.length) return '';
+  return `
+  <div class="print-tasks">
+    <h4>🛠️ مهام أخرى (صيانة / تشفيت / تغيير جراب)</h4>
+    ${tasks.map(t=>{
+      const op = state.crew.operators.find(o=>o.id===t.opId);
+      return `<div class="print-task-row"><span><b>${esc(t.type)}</b></span><span>الوناش: ${op? esc(op.name):'-'}</span><span>ونش رقم: ${esc(t.craneNum)}</span></div>`;
+    }).join('')}
+  </div>`;
+}
+function buildRosterPrintBundleHTML(date){
+  const roster = getRoster(date);
+  const tbtHTML = (roster.tbt||'').trim() ? `
+  <div class="print-tbt">
+    <h4>📋 تعليمات TBT (Toolbox Talk)</h4>
+    <p>${esc(roster.tbt)}</p>
+  </div>` : '';
+  return `
+  <div id="rosterTableCapture" class="print-wrap">
+    ${tbtHTML}
+    ${buildRosterTableHTML(date)}
+    ${buildOtherTasksPrintHTML(date)}
   </div>`;
 }
 function shareRosterTable(date){
@@ -928,6 +971,7 @@ function aiGenerateRoster(date){
 
 /* ===================== HANDOVER ===================== */
 function viewHandover(){
+  if(!state.handoverVessels) state.handoverVessels = [];
   return `
   <div id="captureArea">
   <h1>التسليم والتسلم</h1>
@@ -948,7 +992,33 @@ function viewHandover(){
     <button class="btn-gold" onclick="addHandover()">حفظ</button>
   </div>
   <div style="margin-top:16px;">${renderHandovers()}</div>
-  </div>`;
+
+  <div class="divider"></div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3>تسليم/تسلم المراكب — تفاصيل الأوناش</h3>
+    <p class="muted" style="margin-bottom:10px;">أضف مركب أو أكتر، وحدد لكل مركب الأوناش وأمام كل ونش العنبر والمعدة الموجودة فيه (لودر أو شوكة) — بدون الوناشين.</p>
+    <div class="g2">
+      <div class="field"><label>اختر مركب من بيرس بلان</label>
+        <select id="hoPickVessel">
+          <option value="">-- اختر --</option>
+          ${state.vessels.map(v=>`<option value="${v.id}">${esc(v.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>أو اكتب اسم مركب يدوياً</label><input id="hoManualVessel" placeholder="اسم مركب (اختياري)"></div>
+    </div>
+    <button class="btn-ghost" onclick="addHandoverVesselEntry()">إضافة مركب للتسليم</button>
+  </div>
+
+  ${renderHandoverVessels()}
+  </div>
+
+  <div class="row" style="justify-content:space-between;margin-top:18px;">
+    <h3 style="margin:0;">جدول تسليم المراكب (نموذج الطباعة/المشاركة)</h3>
+    <button class="btn-gold btn-sm" onclick="shareHandoverTable()">📤 مشاركة الجدول كصورة</button>
+  </div>
+  ${buildHandoverPrintBundleHTML()}
+  `;
 }
 function renderHandovers(){
   if(!state.handovers.length) return `<div class="empty muted">لا توجد عمليات تسليم/تسلم مسجلة</div>`;
@@ -976,6 +1046,181 @@ function deleteHandover(id){
   state.handovers = state.handovers.filter(x=>x.id!==id);
   log('تسليم وتسلم','حذف',h,null);
   saveState(); renderTab();
+}
+
+/* ----- تسليم/تسلم المراكب: أوناش + عنبر + معدة (بدون وناشين) ----- */
+function addHandoverVesselEntry(){
+  const pick = document.getElementById('hoPickVessel').value;
+  const manual = document.getElementById('hoManualVessel').value.trim();
+  let name;
+  if(pick){ name = state.vessels.find(v=>v.id===pick).name; }
+  else if(manual){ name = manual; }
+  else { alert('اختر مركب أو اكتب اسمه'); return; }
+  state.handoverVessels.push({id:uid(), name, cranes:[]});
+  log('تسليم مركب','إضافة مركب',null,{name});
+  saveState(); renderTab();
+}
+function removeHandoverVesselEntry(vId){
+  const v = state.handoverVessels.find(x=>x.id===vId);
+  if(!confirm('إزالة هذا المركب من قائمة التسليم؟')) return;
+  state.handoverVessels = state.handoverVessels.filter(x=>x.id!==vId);
+  log('تسليم مركب','حذف مركب',v,null);
+  saveState(); renderTab();
+}
+function addHandoverCrane(vId){
+  const v = state.handoverVessels.find(x=>x.id===vId);
+  const craneNumber = prompt('رقم الونش (Crane):', '');
+  if(craneNumber===null) return;
+  const hold = prompt('رقم/اسم العنبر (Hold):', '');
+  if(hold===null) return;
+  v.cranes.push({id:uid(), craneNumber: craneNumber.trim()||'-', hold: hold.trim()||'-', equipment:[]});
+  saveState(); renderTab();
+}
+function updateHandoverCraneField(vId,crId,field,value){
+  const v = state.handoverVessels.find(x=>x.id===vId);
+  const cr = v.cranes.find(c=>c.id===crId);
+  cr[field] = value.trim()||'-';
+  saveState(); renderTab();
+}
+function removeHandoverCrane(vId,crId){
+  const v = state.handoverVessels.find(x=>x.id===vId);
+  if(!confirm('حذف هذا الونش؟')) return;
+  v.cranes = v.cranes.filter(c=>c.id!==crId);
+  saveState(); renderTab();
+}
+function assignHandoverEquipFromSelect(vId,crId){
+  const sel = document.getElementById(`hoEqSel-${crId}`);
+  const val = sel.value;
+  if(!val) return;
+  const [type,id,number] = val.split(':');
+  const v = state.handoverVessels.find(x=>x.id===vId);
+  const cr = v.cranes.find(c=>c.id===crId);
+  cr.equipment.push({label:(type==='loader'?'لودر ':'شوكة ')+number, refId:id, type});
+  saveState(); renderTab();
+}
+function assignHandoverManualEquip(vId,crId){
+  const inp = document.getElementById(`hoEqManual-${crId}`);
+  const val = inp.value.trim();
+  if(!val) return;
+  const v = state.handoverVessels.find(x=>x.id===vId);
+  const cr = v.cranes.find(c=>c.id===crId);
+  cr.equipment.push({label: val+' (مؤقت)', refId:null, type:'manual'});
+  saveState(); renderTab();
+}
+function removeHandoverEquip(vId,crId,idx){
+  const v = state.handoverVessels.find(x=>x.id===vId);
+  const cr = v.cranes.find(c=>c.id===crId);
+  cr.equipment.splice(idx,1);
+  saveState(); renderTab();
+}
+function renderHandoverVessels(){
+  if(!state.handoverVessels.length) return `<div class="empty muted">لم تتم إضافة أي مركب لقائمة التسليم بعد</div>`;
+  return state.handoverVessels.map(v=>`
+    <div class="card" style="margin-bottom:14px;">
+      <div class="row" style="justify-content:space-between;">
+        <h2>${esc(v.name)}</h2>
+        <div class="row">
+          <button class="btn-ghost btn-sm" onclick="addHandoverCrane('${v.id}')">+ إضافة ونش</button>
+          <button class="btn-danger btn-sm" onclick="removeHandoverVesselEntry('${v.id}')">إزالة المركب</button>
+        </div>
+      </div>
+      ${v.cranes.length? v.cranes.map(cr=>renderHandoverCrane(v.id,cr)).join('') : `<div class="muted">لا يوجد أوناش مضافة لهذا المركب</div>`}
+    </div>`).join('');
+}
+function renderHandoverCrane(vId,cr){
+  return `
+  <div class="crane-block">
+    <div class="row" style="justify-content:space-between;align-items:flex-end;">
+      <div class="row" style="gap:14px;">
+        <div class="field" style="margin-bottom:0;max-width:150px;">
+          <label>رقم الونش (Crane)</label>
+          <input value="${esc(cr.craneNumber||'')}" onchange="updateHandoverCraneField('${vId}','${cr.id}','craneNumber',this.value)">
+        </div>
+        <div class="field" style="margin-bottom:0;max-width:150px;">
+          <label>رقم العنبر (Hold)</label>
+          <input value="${esc(cr.hold||'')}" onchange="updateHandoverCraneField('${vId}','${cr.id}','hold',this.value)">
+        </div>
+      </div>
+      <button class="btn-danger btn-sm" onclick="removeHandoverCrane('${vId}','${cr.id}')">حذف الونش</button>
+    </div>
+    <div style="margin:10px 0;">
+      <label>المعدة الموجودة في العنبر</label>
+      <div>${cr.equipment.map((eq,i)=>`<span class="chip">${esc(eq.label)} <button onclick="removeHandoverEquip('${vId}','${cr.id}',${i})">✕</button></span>`).join('') || '<span class="muted">لا يوجد</span>'}</div>
+      <div class="row">
+        <select id="hoEqSel-${cr.id}">
+          <option value="">-- اختر معدة --</option>
+          ${state.crew.loaders.map(l=>`<option value="loader:${l.id}:${esc(l.number)}">لودر ${esc(l.number)}</option>`).join('')}
+          ${state.crew.forklifts.map(f=>`<option value="fork:${f.id}:${esc(f.number)}">شوكة ${esc(f.number)}</option>`).join('')}
+        </select>
+        <button class="btn-ghost btn-sm" onclick="assignHandoverEquipFromSelect('${vId}','${cr.id}')">إضافة</button>
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <input id="hoEqManual-${cr.id}" placeholder="معدة أخرى (إدخال يدوي مؤقت)">
+        <button class="btn-ghost btn-sm" onclick="assignHandoverManualEquip('${vId}','${cr.id}')">إضافة</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ----- جدول طباعة/مشاركة تسليم المراكب: بدون TBT وبدون مهام أخرى ----- */
+function buildHandoverTableHTML(){
+  const rows = [];
+  state.handoverVessels.forEach(v=>{
+    v.cranes.forEach(cr=>{
+      const eqTxt = cr.equipment.map(e=>e.label).join(' / ') || '-';
+      rows.push({ vessel: v.name, crane: cr.craneNumber||'-', hold: cr.hold||'-', equip: eqTxt });
+    });
+  });
+  if(!rows.length){
+    return `<div class="empty muted">لا توجد بيانات كافية لعرض جدول التسليم بعد (أضف مركب وونش واحد على الأقل)</div>`;
+  }
+  return `
+  <div style="overflow-x:auto;border-radius:10px;">
+    <table class="rt-table">
+      <thead>
+        <tr><th class="rt-title" colspan="4">Vessel Handover / Takeover</th></tr>
+        <tr>
+          <th>المركب<br><span class="rt-en">Vessel</span></th>
+          <th>Crane</th>
+          <th>Hold</th>
+          <th>المعدة<br><span class="rt-en">Equipment</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r=>`
+          <tr>
+            <td>${esc(r.vessel)}</td>
+            <td class="rt-crane">${esc(r.crane)}</td>
+            <td>${esc(r.hold)}</td>
+            <td>${esc(r.equip)}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+function buildHandoverPrintBundleHTML(){
+  return `<div id="handoverTableCapture" class="print-wrap">${buildHandoverTableHTML()}</div>`;
+}
+function shareHandoverTable(){
+  const el = document.getElementById('handoverTableCapture');
+  if(!el){ alert('أضف بيانات التسليم أولاً قبل المشاركة'); return; }
+  html2canvas(el, {
+    backgroundColor:'#ffffff',
+    scale:2,
+    useCORS:true,
+    width: el.scrollWidth,
+    height: el.scrollHeight,
+    windowWidth: el.scrollWidth,
+    windowHeight: el.scrollHeight
+  }).then(canvas=>{
+    canvas.toBlob(blob=>{
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `handover_table_${todayStr()}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  });
 }
 
 /* ===================== REPORTS ===================== */
