@@ -176,12 +176,12 @@ window.onNativeDataReceived = function(data) {
   if(data && data.trim().length > 0 && data !== "null") {
     try {
       state = JSON.parse(data);
-      if (name) state.name = name; // allow updating display name
+      if (name) state.name = name; 
     } catch(e) {
-      state = blankState(email, name);
+      state = loadLocalBackup(email, name);
     }
   } else {
-    state = blankState(email, name);
+    state = loadLocalBackup(email, name);
     saveState();
   }
   render();
@@ -207,8 +207,21 @@ function blankState(email,name){
   };
 }
 
+function loadLocalBackup(email, name) {
+  try {
+    const localData = localStorage.getItem(keyFor(email));
+    if (localData) {
+      return JSON.parse(localData);
+    }
+  } catch(e) { console.error('local load failed', e); }
+  return blankState(email, name);
+}
+
 async function saveState(){
   try{
+    if (state && state.email) {
+      localStorage.setItem(keyFor(state.email), JSON.stringify(state));
+    }
     if (window.NativeStorage) {
         window.NativeStorage.postMessage('set:::' + keyFor(state.email) + ':::' + JSON.stringify(state));
     }
@@ -229,15 +242,13 @@ async function tryLogin(){
   
   try{
     if (window.NativeStorage) {
-      // إرسال طلب جلب البيانات لفلاتر
       window.NativeStorage.postMessage('get:::' + keyFor(email));
     } else {
-      // Fallback في حال التشغيل من المتصفح العادي بدون فلاتر
-      state = blankState(email, name);
+      state = loadLocalBackup(email, name);
       render();
     }
   }catch(e){
-    state = blankState(email, name);
+    state = loadLocalBackup(email, name);
     saveState();
     render();
   }
@@ -530,7 +541,8 @@ function currentRosterDate(){
   return el ? el.value : todayStr();
 }
 function getRoster(date){
-  if(!state.rosterDates[date]) state.rosterDates[date] = {vessels:[], tbt:''};
+  if(!state.rosterDates[date]) state.rosterDates[date] = {vessels:[], tbt:'', otherTasks:[]};
+  if(!state.rosterDates[date].otherTasks) state.rosterDates[date].otherTasks = [];
   return state.rosterDates[date];
 }
 function viewRoster(){
@@ -551,6 +563,39 @@ function viewRoster(){
   <div class="tbt-box">
     <h3 style="margin-bottom:8px;">📋 تعليمات TBT (Toolbox Talk)</h3>
     <textarea id="tbtNote" placeholder="اكتب هنا بنود وتعليمات السلامة قبل بدء العمل..." onchange="updateTBT(this.value, '${date}')">${esc(roster.tbt||'')}</textarea>
+  </div>
+
+  <!-- صندوق مهام أخرى المضاف حديثاً -->
+  <div class="tbt-box" style="border-color: rgba(61,220,132,0.4); background: rgba(61,220,132,0.02);">
+    <h3 style="margin-bottom:8px; color: var(--ok);">🛠️ مهام أخرى (صيانة / تشفيت / تغيير جراب)</h3>
+    <div style="margin-bottom: 12px;" id="otherTasksContainer">
+      ${renderOtherTasksList(date)}
+    </div>
+    <div class="g4">
+      <div class="field" style="margin-bottom:0;">
+        <label>ونّاش من الطاقم</label>
+        <select id="otOpId">
+          <option value="">-- اختر وناش --</option>
+          ${state.crew.operators.filter(o=>!isOnLeave(o.name,date)).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>رقم الونش</label>
+        <input id="otCraneNum" placeholder="مثال: Crane 01">
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label>نوع المهمة</label>
+        <select id="otType">
+          <option value="تشفيت">تشفيت</option>
+          <option value="صيانة">صيانة</option>
+          <option value="تغيير جراب">تغيير جراب</option>
+          <option value="مهام اخرى">مهام اخرى</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0; display:flex; align-items:flex-end;">
+        <button class="btn-gold btn-sm" style="width:100%; height:42px;" onclick="addOtherTask('${date}')">إضافة المهمة</button>
+      </div>
+    </div>
   </div>
 
   <div class="card" style="margin-bottom:16px;">
@@ -582,6 +627,43 @@ function viewRoster(){
 }
 function updateShiftName(v){ state.shiftName=v.trim()||state.shiftName; saveState(); }
 function updateTBT(v,date){ getRoster(date).tbt=v; saveState(); }
+
+/* ----- دالات التحكم في المهام الأخرى ----- */
+function addOtherTask(date){
+  const opId = document.getElementById('otOpId').value;
+  const craneNum = document.getElementById('otCraneNum').value.trim();
+  const type = document.getElementById('otType').value;
+  
+  if(!opId || !craneNum){ alert('من فضلك اختر وناش وحدد رقم الونش أولاً'); return; }
+  
+  const roster = getRoster(date);
+  const task = { id: uid(), opId, craneNum, type };
+  roster.otherTasks.push(task);
+  log('روستر', 'إضافة مهمة أخرى', null, {date, task});
+  saveState(); renderTab();
+}
+function deleteOtherTask(date, taskId){
+  const roster = getRoster(date);
+  roster.otherTasks = roster.otherTasks.filter(t => t.id !== taskId);
+  saveState(); renderTab();
+}
+function renderOtherTasksList(date){
+  const roster = getRoster(date);
+  if(!roster.otherTasks || !roster.otherTasks.length) return `<div class="muted" style="font-size:0.85rem; padding:5px;">لا توجد مهام إضافية مسجلة بعد لهذا اليوم.</div>`;
+  return roster.otherTasks.map(t => {
+    const op = state.crew.operators.find(o => o.id === t.opId);
+    return `
+      <div class="list-item" style="margin-bottom: 6px; padding: 8px 12px; background: rgba(255,255,255,0.02);">
+        <div>
+          <span class="pill pill-B" style="margin-left:8px;">${esc(t.type)}</span>
+          <span>الوناش: <b>${op ? esc(op.name) : 'غير معروف'}</b></span> | 
+          <span>ونش رقم: <b>${esc(t.craneNum)}</b></span>
+        </div>
+        <button class="btn-danger btn-sm" style="padding: 4px 8px;" onclick="deleteOtherTask('${date}', '${t.id}')">✕ إزالة</button>
+      </div>
+    `;
+  }).join('');
+}
 
 function addVesselToRoster(date){
   const roster = getRoster(date);
@@ -695,6 +777,7 @@ function removeCrane(date,vId,crId){
 function buildRosterTableHTML(date){
   const roster = getRoster(date);
   const rows = [];
+  
   roster.vessels.forEach(rv=>{
     rv.cranes.forEach(cr=>{
       const loaderTxt = cr.equipment.filter(e=>e.type==='loader').map(e=>e.label.replace('لودر ','')).join(' / ') || '-';
@@ -712,8 +795,22 @@ function buildRosterTableHTML(date){
     });
   });
 
+  // إضافة المهام الأخرى لجدول الطباعة
+  if(roster.otherTasks) {
+    roster.otherTasks.forEach(t => {
+      const op = state.crew.operators.find(o => o.id === t.opId);
+      rows.push({
+        vessel: `[${t.type}]`,
+        loader: '-',
+        hold: '-',
+        ops: op ? op.name : '-',
+        crane: t.craneNum
+      });
+    });
+  }
+
   if(!rows.length){
-    return `<div class="empty muted" id="rosterTableCapture">لا توجد بيانات كافية لعرض الجدول بعد (أضف ونش واحد على الأقل مع بيانات)</div>`;
+    return `<div class="empty muted" id="rosterTableCapture">لا توجد بيانات كافية لعرض الجدول بعد (أضف ونش واحد أو مهمة على الأقل)</div>`;
   }
 
   const teamLabel = esc(state.shiftName||'');
@@ -726,7 +823,7 @@ function buildRosterTableHTML(date){
           <th class="rt-title" colspan="5">Crane Operator Shift Roster</th>
         </tr>
         <tr>
-          <th>المركب<br><span class="rt-en">Vessel</span></th>
+          <th>المركب / المهمة<br><span class="rt-en">Vessel / Task</span></th>
           <th>Loader</th>
           <th>Hold</th>
           <th>Crane Operator</th>
@@ -807,7 +904,6 @@ function removeEquipFromCrane(date,vId,crId,idx){
   saveState(); renderTab();
 }
 
-// AI-assisted balanced auto-generation (rating-balanced, leave-aware, no double booking)
 function aiGenerateRoster(date){
   const roster = getRoster(date);
   if(!roster.vessels.length){ alert('أضف مركب واحد على الأقل أولاً'); return; }
@@ -818,15 +914,10 @@ function aiGenerateRoster(date){
   const available = state.crew.operators.filter(o=>!isOnLeave(o.name,date));
   const byRating = {A:[],B:[],C:[]};
   available.forEach(o=> byRating[o.rating] && byRating[o.rating].push(o.id) );
-  // shuffle within rating for fairness
   Object.values(byRating).forEach(arr=>arr.sort(()=>Math.random()-0.5));
 
   cranes.forEach(c=>c.operators=[]);
-  // round robin: give each crane one operator per pass, prioritizing spreading A across cranes first
-  let i=0;
   const order = ['A','B','C'];
-  let pool = [...byRating.A, ...byRating.B, ...byRating.C];
-  // Better balance: assign one from each rating tier across cranes in rotation
   let ratingQueues = {A:[...byRating.A], B:[...byRating.B], C:[...byRating.C]};
   let craneIdx=0;
   let guard=0;
