@@ -168,25 +168,6 @@ let state = null;
 let currentTab = 'crew';
 let aiHistory = [];
 
-// --- دالة استقبال البيانات من فلاتر ---
-window.onNativeDataReceived = function(data) {
-  const email = document.getElementById('loginEmail') ? document.getElementById('loginEmail').value.trim() : (state ? state.email : '');
-  const name = document.getElementById('loginName') ? document.getElementById('loginName').value.trim() : (state ? state.name : '');
-
-  if(data && data.trim().length > 0 && data !== "null") {
-    try {
-      state = JSON.parse(data);
-      if (name) state.name = name; 
-    } catch(e) {
-      state = blankState(email, name);
-    }
-  } else {
-    state = blankState(email, name);
-    saveState();
-  }
-  render();
-};
-
 function keyFor(email){
   return 'roster_app:' + (email||'').toLowerCase().trim().replace(/[^a-z0-9.]/g,'_');
 }
@@ -207,113 +188,56 @@ function blankState(email,name){
   };
 }
 
-async function saveState(){
+// حفظ محلي دائم في المتصفح (يعمل في سفاري وكروم وأي متصفح، حتى لو الإنترنت مقطوع)
+function saveState(){
   try{
-    const key = keyFor(state.email);
-    const dataStr = JSON.stringify(state);
-    
-    // أولاً: الحفظ في متصفح الويب (عشان سفاري وكروم والكمبيوتر)
-    localStorage.setItem(key, dataStr);
+    if(!state || !state.email) return;
+    localStorage.setItem(keyFor(state.email), JSON.stringify(state));
     localStorage.setItem('roster_current_user_email', state.email);
     localStorage.setItem('roster_current_user_name', state.name);
-
-    // ثانياً: الحفظ في الموبايل لو متصل بـ فلاتر
-    if (window.NativeStorage) {
-        window.NativeStorage.postMessage('set:::' + key + ':::' + dataStr);
-    }
-  }catch(e){ console.error('save failed', e); }
+  }catch(e){ console.error('save failed', e); alert('تعذر حفظ البيانات محلياً — تأكد إن مساحة التخزين في المتصفح غير ممتلئة.'); }
 }
-
 function log(entity, action, before, after){
   state.logs.unshift({id:uid(), ts:nowStr(), entity, action, before, after, user:state.name});
   if(state.logs.length>500) state.logs.length=500;
 }
 
 /* ===================== LOGIN ===================== */
-async function tryLogin(){
+function tryLogin(){
   const email = document.getElementById('loginEmail').value.trim();
   const name = document.getElementById('loginName').value.trim();
   if(!email || !name){ alert('من فضلك ادخل الاسم والإيميل'); return; }
-  const btn = document.getElementById('loginBtn');
-  btn.innerHTML = '<span class="spinner"></span> جاري التحميل...';
-  
-  const key = keyFor(email);
-
   try{
-    if (window.NativeStorage) {
-      // إرسال طلب جلب البيانات لفلاتر
-      window.NativeStorage.postMessage('get:::' + key);
+    const localData = localStorage.getItem(keyFor(email));
+    if(localData){
+      state = JSON.parse(localData);
+      if(name) state.name = name; // تحديث الاسم المعروض لو اتغيّر
     } else {
-      // Fallback: جلب البيانات من LocalStorage المتصفح مباشرة
-      const localData = localStorage.getItem(key);
-      if(localData) {
-        state = JSON.parse(localData);
-        if(name) state.name = name; // تحديث الاسم لو اتغير
-      } else {
-        state = blankState(email, name);
-        saveState();
-      }
-      render();
+      state = blankState(email, name);
     }
+    saveState();
   }catch(e){
     state = blankState(email, name);
     saveState();
-    render();
   }
+  render();
 }
 
-// دالة فحص تسجيل الدخول التلقائي عند فتح المتصفح
-function checkAutoLogin() {
-  try {
+// تسجيل دخول تلقائي لو المستخدم فتح المتصفح تاني بعد ما سجّل قبل كده
+function checkAutoLogin(){
+  try{
     const savedEmail = localStorage.getItem('roster_current_user_email');
     const savedName = localStorage.getItem('roster_current_user_name');
-    if(savedEmail && savedName) {
-      const key = keyFor(savedEmail);
-      const localData = localStorage.getItem(key);
-      if(localData) {
+    if(savedEmail){
+      const localData = localStorage.getItem(keyFor(savedEmail));
+      if(localData){
         state = JSON.parse(localData);
-        render();
+        if(savedName) state.name = savedName;
       }
     }
-  } catch(e) { console.error("Auto login failed", e); }
+  }catch(e){ console.error('auto login failed', e); }
 }
 
-async function saveState(){
-  try{
-    if (state && state.email) {
-      localStorage.setItem(keyFor(state.email), JSON.stringify(state));
-    }
-    if (window.NativeStorage) {
-        window.NativeStorage.postMessage('set:::' + keyFor(state.email) + ':::' + JSON.stringify(state));
-    }
-  }catch(e){ console.error('save failed', e); }
-}
-function log(entity, action, before, after){
-  state.logs.unshift({id:uid(), ts:nowStr(), entity, action, before, after, user:state.name});
-  if(state.logs.length>500) state.logs.length=500;
-}
-
-/* ===================== LOGIN ===================== */
-async function tryLogin(){
-  const email = document.getElementById('loginEmail').value.trim();
-  const name = document.getElementById('loginName').value.trim();
-  if(!email || !name){ alert('من فضلك ادخل الاسم والإيميل'); return; }
-  const btn = document.getElementById('loginBtn');
-  btn.innerHTML = '<span class="spinner"></span> جاري التحميل...';
-  
-  try{
-    if (window.NativeStorage) {
-      window.NativeStorage.postMessage('get:::' + keyFor(email));
-    } else {
-      state = loadLocalBackup(email, name);
-      render();
-    }
-  }catch(e){
-    state = loadLocalBackup(email, name);
-    saveState();
-    render();
-  }
-}
 
 function renderLogin(){
   const app = document.getElementById('app');
@@ -626,8 +550,34 @@ function viewRoster(){
     <textarea id="tbtNote" placeholder="اكتب هنا بنود وتعليمات السلامة قبل بدء العمل..." onchange="updateTBT(this.value, '${date}')">${esc(roster.tbt||'')}</textarea>
   </div>
 
-  <!-- صندوق مهام أخرى المضاف حديثاً -->
-  <div class="tbt-box" style="border-color: rgba(61,220,132,0.4); background: rgba(61,220,132,0.02);">
+  <div class="card" style="margin-bottom:16px;">
+    <div class="row" style="justify-content:space-between;">
+      <h3 style="margin:0;">إضافة مركب للتخطيط</h3>
+      <button class="btn-gold btn-sm" onclick="aiGenerateRoster('${date}')">✨ توليد تلقائي بالذكاء الاصطناعي</button>
+    </div>
+    <div class="g2" style="margin-top:10px;">
+      <div class="field"><label>اختر مركب من بيرس بلان</label>
+        <select id="pickVessel">
+          <option value="">-- اختر --</option>
+          ${state.vessels.map(v=>`<option value="${v.id}">${esc(v.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>أو اكتب اسم مركب يدوياً</label><input id="manualVessel" placeholder="اسم مركب (اختياري)"></div>
+    </div>
+    <button class="btn-ghost" onclick="addVesselToRoster('${date}')">إضافة للتخطيط</button>
+  </div>
+
+  ${renderRosterVessels(date)}
+  </div>
+
+  <div class="row" style="justify-content:space-between;margin-top:18px;">
+    <h3 style="margin:0;">جدول الروستر (نموذج الطباعة/المشاركة)</h3>
+    <button class="btn-gold btn-sm" onclick="shareRosterTable('${date}')">📤 مشاركة الجدول كصورة</button>
+  </div>
+  ${buildRosterTableHTML(date)}
+
+  <!-- قائمة المهام الأخرى — في آخر صفحة الروستر كما طلبت -->
+  <div class="tbt-box" style="border-color: rgba(61,220,132,0.4); background: rgba(61,220,132,0.02); margin-top:18px;">
     <h3 style="margin-bottom:8px; color: var(--ok);">🛠️ مهام أخرى (صيانة / تشفيت / تغيير جراب)</h3>
     <div style="margin-bottom: 12px;" id="otherTasksContainer">
       ${renderOtherTasksList(date)}
@@ -658,32 +608,6 @@ function viewRoster(){
       </div>
     </div>
   </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <div class="row" style="justify-content:space-between;">
-      <h3 style="margin:0;">إضافة مركب للتخطيط</h3>
-      <button class="btn-gold btn-sm" onclick="aiGenerateRoster('${date}')">✨ توليد تلقائي بالذكاء الاصطناعي</button>
-    </div>
-    <div class="g2" style="margin-top:10px;">
-      <div class="field"><label>اختر مركب من بيرس بلان</label>
-        <select id="pickVessel">
-          <option value="">-- اختر --</option>
-          ${state.vessels.map(v=>`<option value="${v.id}">${esc(v.name)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field"><label>أو اكتب اسم مركب يدوياً</label><input id="manualVessel" placeholder="اسم مركب (اختياري)"></div>
-    </div>
-    <button class="btn-ghost" onclick="addVesselToRoster('${date}')">إضافة للتخطيط</button>
-  </div>
-
-  ${renderRosterVessels(date)}
-  </div>
-
-  <div class="row" style="justify-content:space-between;margin-top:18px;">
-    <h3 style="margin:0;">جدول الروستر (نموذج الطباعة/المشاركة)</h3>
-    <button class="btn-gold btn-sm" onclick="shareRosterTable('${date}')">📤 مشاركة الجدول كصورة</button>
-  </div>
-  ${buildRosterTableHTML(date)}
   `;
 }
 function updateShiftName(v){ state.shiftName=v.trim()||state.shiftName; saveState(); }
@@ -1144,9 +1068,11 @@ function viewSettings(){
     <h3>النسخ الاحتياطي والبيانات</h3>
     <div class="row">
       <button class="btn-ghost" onclick="downloadBackup()">⬇️ تنزيل نسخة احتياطية (JSON)</button>
+      <button class="btn-ghost" onclick="document.getElementById('restoreFileInput').click()">⬆️ استرجاع نسخة احتياطية</button>
+      <input type="file" id="restoreFileInput" accept="application/json" style="display:none" onchange="restoreBackup(this.files[0])">
       <button class="btn-danger" onclick="clearAllData()">🗑️ مسح كل البيانات</button>
     </div>
-    <p class="muted" style="margin-top:10px;">البيانات محفوظة تلقائياً عند كل تعديل ومرتبطة بالإيميل المسجل به.</p>
+    <p class="muted" style="margin-top:10px;">البيانات محفوظة تلقائياً داخل هذا المتصفح (سفاري) عند كل تعديل، ومربوطة بإيميلك. ننصح بتنزيل نسخة احتياطية بانتظام واحتفظ بها في مكان آمن (مثل iCloud Drive أو البريد)، لأن مسح بيانات المتصفح يدوياً من إعدادات آيفون يمسح البيانات المحلية أيضاً.</p>
   </div>
   <div class="card" style="margin-top:16px;">
     <button class="btn-ghost" onclick="logout()">تسجيل الخروج</button>
@@ -1164,15 +1090,37 @@ function downloadBackup(){
   const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `roster_backup_${todayStr()}.json`;
+  a.href = url; a.download = `roster_backup_${state.email.replace(/[^a-z0-9.]/gi,'_')}_${todayStr()}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
-async function clearAllData(){
-  if(!confirm('هل أنت متأكد من مسح كل البيانات؟ لا يمكن التراجع عن هذا الإجراء.')) return;
+function restoreBackup(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(!parsed || !parsed.email){ alert('ملف النسخة الاحتياطية غير صالح.'); return; }
+      if(!confirm(`سيتم استبدال البيانات الحالية ببيانات النسخة الاحتياطية الخاصة بـ ${parsed.email}. متابعة؟`)) return;
+      state = parsed;
+      // تأكد من وجود كل الحقول حتى لو كانت النسخة القديمة ناقصة حقل جديد
+      const blank = blankState(state.email, state.name);
+      state = Object.assign({}, blank, state);
+      state.crew = Object.assign({}, blank.crew, state.crew||{});
+      saveState();
+      render();
+      alert('تم استرجاع النسخة الاحتياطية بنجاح.');
+    }catch(err){
+      alert('تعذّرت قراءة الملف — تأكد أنه ملف JSON صحيح تم تنزيله من نفس التطبيق.');
+    }
+  };
+  reader.readAsText(file);
+}
+function clearAllData(){
+  if(!confirm('هل أنت متأكد من مسح كل البيانات؟ لا يمكن التراجع عن هذا الإجراء. ننصح بتنزيل نسخة احتياطية أولاً.')) return;
   const email = state.email, name = state.name;
   state = blankState(email,name);
-  await saveState();
+  saveState();
   render();
 }
 function logout(){ state=null; render(); }
