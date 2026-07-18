@@ -178,10 +178,10 @@ window.onNativeDataReceived = function(data) {
       state = JSON.parse(data);
       if (name) state.name = name; 
     } catch(e) {
-      state = loadLocalBackup(email, name);
+      state = blankState(email, name);
     }
   } else {
-    state = loadLocalBackup(email, name);
+    state = blankState(email, name);
     saveState();
   }
   render();
@@ -207,14 +207,75 @@ function blankState(email,name){
   };
 }
 
-function loadLocalBackup(email, name) {
-  try {
-    const localData = localStorage.getItem(keyFor(email));
-    if (localData) {
-      return JSON.parse(localData);
+async function saveState(){
+  try{
+    const key = keyFor(state.email);
+    const dataStr = JSON.stringify(state);
+    
+    // أولاً: الحفظ في متصفح الويب (عشان سفاري وكروم والكمبيوتر)
+    localStorage.setItem(key, dataStr);
+    localStorage.setItem('roster_current_user_email', state.email);
+    localStorage.setItem('roster_current_user_name', state.name);
+
+    // ثانياً: الحفظ في الموبايل لو متصل بـ فلاتر
+    if (window.NativeStorage) {
+        window.NativeStorage.postMessage('set:::' + key + ':::' + dataStr);
     }
-  } catch(e) { console.error('local load failed', e); }
-  return blankState(email, name);
+  }catch(e){ console.error('save failed', e); }
+}
+
+function log(entity, action, before, after){
+  state.logs.unshift({id:uid(), ts:nowStr(), entity, action, before, after, user:state.name});
+  if(state.logs.length>500) state.logs.length=500;
+}
+
+/* ===================== LOGIN ===================== */
+async function tryLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const name = document.getElementById('loginName').value.trim();
+  if(!email || !name){ alert('من فضلك ادخل الاسم والإيميل'); return; }
+  const btn = document.getElementById('loginBtn');
+  btn.innerHTML = '<span class="spinner"></span> جاري التحميل...';
+  
+  const key = keyFor(email);
+
+  try{
+    if (window.NativeStorage) {
+      // إرسال طلب جلب البيانات لفلاتر
+      window.NativeStorage.postMessage('get:::' + key);
+    } else {
+      // Fallback: جلب البيانات من LocalStorage المتصفح مباشرة
+      const localData = localStorage.getItem(key);
+      if(localData) {
+        state = JSON.parse(localData);
+        if(name) state.name = name; // تحديث الاسم لو اتغير
+      } else {
+        state = blankState(email, name);
+        saveState();
+      }
+      render();
+    }
+  }catch(e){
+    state = blankState(email, name);
+    saveState();
+    render();
+  }
+}
+
+// دالة فحص تسجيل الدخول التلقائي عند فتح المتصفح
+function checkAutoLogin() {
+  try {
+    const savedEmail = localStorage.getItem('roster_current_user_email');
+    const savedName = localStorage.getItem('roster_current_user_name');
+    if(savedEmail && savedName) {
+      const key = keyFor(savedEmail);
+      const localData = localStorage.getItem(key);
+      if(localData) {
+        state = JSON.parse(localData);
+        render();
+      }
+    }
+  } catch(e) { console.error("Auto login failed", e); }
 }
 
 async function saveState(){
@@ -1211,6 +1272,7 @@ function bindTabEvents(){
 }
 
 /* ===================== INIT ===================== */
+checkAutoLogin(); // هيفحص لو كنت مسجل دخول قبل كده في سفاري ويجيب بياناتك
 render();
 </script>
 </body>
