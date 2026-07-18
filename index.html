@@ -151,6 +151,9 @@ th{color:var(--gold);font-weight:700;}
 .print-tasks h4{margin:0 0 8px 0;color:#2e7d32;font-size:1rem;font-family:Arial,"SF Arabic",sans-serif;}
 .print-task-row{display:flex;justify-content:space-between;gap:10px;padding:6px 4px;border-bottom:1px dashed #b7d8b7;font-size:.85rem;font-family:Arial,"SF Arabic",sans-serif;}
 .print-task-row:last-child{border-bottom:none;}
+.print-yard{border:2px solid #1f3b57;border-radius:10px;overflow:hidden;margin-top:14px;font-family:Arial,"SF Arabic",sans-serif;}
+.print-yard h4{margin:0;background:#1f3b57;color:#fff;padding:10px 14px;font-size:1rem;}
+.print-yard .body{padding:12px 14px;background:#eef2f5;color:#111;font-size:.9rem;white-space:pre-wrap;line-height:1.6;}
 ::-webkit-scrollbar{width:8px;}
 ::-webkit-scrollbar-thumb{background:rgba(255,214,10,0.3);border-radius:10px;}
 </style>
@@ -191,6 +194,7 @@ function blankState(email,name){
     leaves:[],
     handovers:[],
     handoverVessels:[],
+    yard:{ name:'', notes:'' },
     rosterDates:{},
     logs:[],
     geminiApiKey:''
@@ -873,25 +877,7 @@ function buildRosterPrintBundleHTML(date){
   </div>`;
 }
 function shareRosterTable(date){
-  const el = document.getElementById('rosterTableCapture');
-  if(!el){ alert('أضف بيانات الروستر أولاً قبل المشاركة'); return; }
-  html2canvas(el, {
-    backgroundColor:'#ffffff',
-    scale:2,
-    useCORS:true,
-    width: el.scrollWidth,
-    height: el.scrollHeight,
-    windowWidth: el.scrollWidth,
-    windowHeight: el.scrollHeight
-  }).then(canvas=>{
-    canvas.toBlob(blob=>{
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `roster_table_${date}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  });
+  shareElement('rosterTableCapture', `roster_table_${date}.png`, '#ffffff');
 }
 function assignOperator(date,vId,crId,opId){
   if(!opId) return;
@@ -972,6 +958,7 @@ function aiGenerateRoster(date){
 /* ===================== HANDOVER ===================== */
 function viewHandover(){
   if(!state.handoverVessels) state.handoverVessels = [];
+  if(!state.yard) state.yard = { name:'', notes:'' };
   return `
   <div id="captureArea">
   <h1>التسليم والتسلم</h1>
@@ -1011,14 +998,29 @@ function viewHandover(){
   </div>
 
   ${renderHandoverVessels()}
+
+  <div class="card" style="margin-top:16px;">
+    <h3>معلومات اليارد</h3>
+    <p class="muted" style="margin-bottom:10px;">تظهر هذه المعلومات تلقائياً أسفل جدول المراكب في نفس صورة المشاركة.</p>
+    <div class="field"><label>اسم/رقم اليارد (اختياري)</label>
+      <input id="yardNameInput" value="${esc(state.yard.name||'')}" placeholder="مثال: يارد رقم 3" onchange="updateYardField('name',this.value)">
+    </div>
+    <div class="field"><label>معلومات أخرى (إدخال يدوي)</label>
+      <textarea id="yardNotesInput" placeholder="اكتب هنا أي تفاصيل عن اليارد: الحمولة، المساحة المتاحة، ملاحظات التسليم..." onchange="updateYardField('notes',this.value)">${esc(state.yard.notes||'')}</textarea>
+    </div>
+  </div>
   </div>
 
   <div class="row" style="justify-content:space-between;margin-top:18px;">
-    <h3 style="margin:0;">جدول تسليم المراكب (نموذج الطباعة/المشاركة)</h3>
+    <h3 style="margin:0;">جدول تسليم المراكب + اليارد (نموذج الطباعة/المشاركة)</h3>
     <button class="btn-gold btn-sm" onclick="shareHandoverTable()">📤 مشاركة الجدول كصورة</button>
   </div>
   ${buildHandoverPrintBundleHTML()}
   `;
+}
+function updateYardField(field,value){
+  state.yard[field] = value;
+  saveState();
 }
 function renderHandovers(){
   if(!state.handovers.length) return `<div class="empty muted">لا توجد عمليات تسليم/تسلم مسجلة</div>`;
@@ -1198,29 +1200,19 @@ function buildHandoverTableHTML(){
     </table>
   </div>`;
 }
+function buildYardPrintHTML(){
+  const y = state.yard || {name:'',notes:''};
+  return `
+  <div class="print-yard">
+    <h4>🏗️ اليارد ${y.name? '— '+esc(y.name):''}</h4>
+    <div class="body">${y.notes && y.notes.trim() ? esc(y.notes).replace(/\n/g,'<br>') : 'لا توجد معلومات إضافية مسجلة.'}</div>
+  </div>`;
+}
 function buildHandoverPrintBundleHTML(){
-  return `<div id="handoverTableCapture" class="print-wrap">${buildHandoverTableHTML()}</div>`;
+  return `<div id="handoverTableCapture" class="print-wrap">${buildHandoverTableHTML()}${buildYardPrintHTML()}</div>`;
 }
 function shareHandoverTable(){
-  const el = document.getElementById('handoverTableCapture');
-  if(!el){ alert('أضف بيانات التسليم أولاً قبل المشاركة'); return; }
-  html2canvas(el, {
-    backgroundColor:'#ffffff',
-    scale:2,
-    useCORS:true,
-    width: el.scrollWidth,
-    height: el.scrollHeight,
-    windowWidth: el.scrollWidth,
-    windowHeight: el.scrollHeight
-  }).then(canvas=>{
-    canvas.toBlob(blob=>{
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `handover_table_${todayStr()}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  });
+  shareElement('handoverTableCapture', `handover_table_${todayStr()}.png`, '#ffffff');
 }
 
 /* ===================== REPORTS ===================== */
@@ -1370,19 +1362,58 @@ function clearAllData(){
 }
 function logout(){ state=null; render(); }
 
-/* ===================== SHARE AS IMAGE ===================== */
-function shareCurrent(){
-  const el = document.getElementById('captureArea');
-  if(!el){ alert('لا يوجد محتوى لمشاركته في هذه الصفحة'); return; }
-  html2canvas(el, {backgroundColor:'#08080A', scale:2}).then(canvas=>{
-    canvas.toBlob(blob=>{
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `roster_${currentTab}_${todayStr()}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
+/* ===================== SHARE AS IMAGE (generic, size-adaptive) ===================== */
+// بيعمل نسخة من العنصر برة الشاشة بدون أي قص أو تحديد عرض/ارتفاع ثابت،
+// عشان الصورة الناتجة تطلع بمقاس المحتوى الحقيقي كامل (الجدول + مربع TBT + مربع المهام... إلخ) مهما كان طويل أو عريض.
+function shareElement(elId, filename, bgColor){
+  const src = document.getElementById(elId);
+  if(!src){ alert('لا يوجد محتوى لمشاركته بعد'); return; }
+
+  const clone = src.cloneNode(true);
+  // إلغاء أي تحديد عرض أو قص (overflow/scroll) على العنصر وكل ما بداخله عشان محدش يقطع من الصورة
+  clone.style.overflow = 'visible';
+  clone.style.maxWidth = 'none';
+  clone.style.width = 'max-content';
+  clone.style.position = 'fixed';
+  clone.style.top = '0';
+  clone.style.left = '-100000px';
+  clone.style.zIndex = '-1';
+  clone.querySelectorAll('*').forEach(node=>{
+    node.style.overflow = 'visible';
+    node.style.maxWidth = 'none';
+  });
+  document.body.appendChild(clone);
+
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      const w = Math.ceil(clone.scrollWidth);
+      const h = Math.ceil(clone.scrollHeight);
+      html2canvas(clone, {
+        backgroundColor: bgColor || '#ffffff',
+        scale: 2,
+        useCORS: true,
+        width: w,
+        height: h,
+        windowWidth: w,
+        windowHeight: h
+      }).then(canvas=>{
+        canvas.toBlob(blob=>{
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+          document.body.removeChild(clone);
+        });
+      }).catch(()=>{
+        document.body.removeChild(clone);
+        alert('حدث خطأ أثناء إنشاء الصورة، حاول مرة أخرى.');
+      });
     });
   });
+}
+function shareCurrent(){
+  shareElement('captureArea', `roster_${currentTab}_${todayStr()}.png`, '#08080A');
 }
 
 /* ===================== AI ASSISTANT (Gemini) ===================== */
