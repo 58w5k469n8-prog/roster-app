@@ -60,6 +60,9 @@ input,select,textarea{
   padding:11px 13px;
   font-size:.92rem;
   font-family:inherit;
+  direction:rtl;
+  unicode-bidi:plaintext;
+  text-align:right;
   transition:box-shadow .18s cubic-bezier(.175,.885,.32,1.275), transform .18s cubic-bezier(.175,.885,.32,1.275), border-color .18s;
   outline:none;
 }
@@ -68,7 +71,7 @@ input:focus,select:focus,textarea:focus{
   box-shadow:0 0 0 4px rgba(255,214,10,0.15);
   transform:scale(1.015);
 }
-textarea{resize:vertical;min-height:70px;}
+textarea{resize:vertical;min-height:70px;line-height:1.6;}
 .field{margin-bottom:12px;}
 button{
   font-family:inherit;
@@ -143,17 +146,17 @@ th{color:var(--gold);font-weight:700;}
 .rt-table td.rt-team{background:#b9c3cd;font-weight:700;}
 .rt-table td.rt-op{font-weight:700;}
 .rt-table td.rt-crane{font-weight:800;color:#155724;}
-.print-wrap{background:#fff;border-radius:10px;padding:14px;}
-.print-tbt{border:2px solid #C9A100;background:#FFF6D6;color:#3a2e00;border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+.print-wrap{background:#fff;border-radius:10px;padding:14px;direction:rtl;text-align:right;}
+.print-tbt{border:2px solid #C9A100;background:#FFF6D6;color:#3a2e00;border-radius:10px;padding:12px 14px;margin-bottom:12px;direction:rtl;text-align:right;}
 .print-tbt h4{margin:0 0 6px 0;color:#8a6d00;font-size:1rem;font-family:Arial,"SF Arabic",sans-serif;}
-.print-tbt p{margin:0;white-space:pre-wrap;font-size:.9rem;line-height:1.5;font-family:Arial,"SF Arabic",sans-serif;}
-.print-tasks{border:2px solid #2e7d32;background:#EAF6EA;color:#1b3a1b;border-radius:10px;padding:12px 14px;margin-top:12px;}
+.print-tbt p{margin:0;white-space:pre-wrap;unicode-bidi:plaintext;font-size:.9rem;line-height:1.5;font-family:Arial,"SF Arabic",sans-serif;}
+.print-tasks{border:2px solid #2e7d32;background:#EAF6EA;color:#1b3a1b;border-radius:10px;padding:12px 14px;margin-top:12px;direction:rtl;text-align:right;}
 .print-tasks h4{margin:0 0 8px 0;color:#2e7d32;font-size:1rem;font-family:Arial,"SF Arabic",sans-serif;}
 .print-task-row{display:flex;justify-content:space-between;gap:10px;padding:6px 4px;border-bottom:1px dashed #b7d8b7;font-size:.85rem;font-family:Arial,"SF Arabic",sans-serif;}
 .print-task-row:last-child{border-bottom:none;}
-.print-yard{border:2px solid #1f3b57;border-radius:10px;overflow:hidden;margin-top:14px;font-family:Arial,"SF Arabic",sans-serif;}
+.print-yard{border:2px solid #1f3b57;border-radius:10px;overflow:hidden;margin-top:14px;font-family:Arial,"SF Arabic",sans-serif;direction:rtl;text-align:right;}
 .print-yard h4{margin:0;background:#1f3b57;color:#fff;padding:10px 14px;font-size:1rem;}
-.print-yard .body{padding:12px 14px;background:#eef2f5;color:#111;font-size:.9rem;white-space:pre-wrap;line-height:1.6;}
+.print-yard .body{padding:12px 14px;background:#eef2f5;color:#111;font-size:.9rem;white-space:pre-wrap;unicode-bidi:plaintext;line-height:1.6;}
 ::-webkit-scrollbar{width:8px;}
 ::-webkit-scrollbar-thumb{background:rgba(255,214,10,0.3);border-radius:10px;}
 </style>
@@ -581,7 +584,7 @@ function viewRoster(){
 
   <div class="tbt-box">
     <h3 style="margin-bottom:8px;">📋 تعليمات TBT (Toolbox Talk)</h3>
-    <textarea id="tbtNote" placeholder="اكتب هنا بنود وتعليمات السلامة قبل بدء العمل..." onchange="updateTBT(this.value, '${date}')">${esc(roster.tbt||'')}</textarea>
+    <textarea id="tbtNote" dir="rtl" placeholder="اكتب هنا بنود وتعليمات السلامة قبل بدء العمل..." onchange="updateTBT(this.value, '${date}')">${esc(roster.tbt||'')}</textarea>
   </div>
 
   <div class="card" style="margin-bottom:16px;">
@@ -975,7 +978,7 @@ function viewHandover(){
       <div class="field"><label>الاسم / المرجع (اختياري)</label><input id="hoRef" placeholder="اسم المركب / رقم اليارد / اسم البضاعة"></div>
       <div class="field"><label>التاريخ والوقت</label><input id="hoDate" type="datetime-local"></div>
     </div>
-    <div class="field"><label>ملاحظات (اختياري)</label><textarea id="hoNotes" placeholder="أي تفاصيل إضافية..."></textarea></div>
+    <div class="field"><label>ملاحظات (اختياري)</label><textarea id="hoNotes" dir="rtl" placeholder="أي تفاصيل إضافية..."></textarea></div>
     <button class="btn-gold" onclick="addHandover()">حفظ</button>
   </div>
   <div style="margin-top:16px;">${renderHandovers()}</div>
@@ -1006,7 +1009,7 @@ function viewHandover(){
       <input id="yardNameInput" value="${esc(state.yard.name||'')}" placeholder="مثال: يارد رقم 3" onchange="updateYardField('name',this.value)">
     </div>
     <div class="field"><label>معلومات أخرى (إدخال يدوي)</label>
-      <textarea id="yardNotesInput" placeholder="اكتب هنا أي تفاصيل عن اليارد: الحمولة، المساحة المتاحة، ملاحظات التسليم..." onchange="updateYardField('notes',this.value)">${esc(state.yard.notes||'')}</textarea>
+      <textarea id="yardNotesInput" dir="rtl" placeholder="اكتب هنا أي تفاصيل عن اليارد: الحمولة، المساحة المتاحة، ملاحظات التسليم..." onchange="updateYardField('notes',this.value)">${esc(state.yard.notes||'')}</textarea>
     </div>
   </div>
   </div>
