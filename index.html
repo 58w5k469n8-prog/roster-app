@@ -63,6 +63,8 @@ input,select,textarea{
   direction:rtl;
   unicode-bidi:plaintext;
   text-align:right;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
   transition:box-shadow .18s cubic-bezier(.175,.885,.32,1.275), transform .18s cubic-bezier(.175,.885,.32,1.275), border-color .18s;
   outline:none;
 }
@@ -112,7 +114,7 @@ button:active{transform:scale(.96);}
 .divider{height:1px;background:var(--border);margin:16px 0;}
 .notice{background:rgba(255,214,10,0.06);border:1px solid rgba(255,214,10,0.25);border-radius:14px;padding:10px 14px;font-size:.78rem;color:#e8d998;margin-top:8px;}
 table{width:100%;border-collapse:collapse;font-size:.85rem;}
-th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--border);}
+th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--border);word-wrap:break-word;overflow-wrap:break-word;}
 th{color:var(--gold);font-weight:700;}
 .crane-block{border:1px solid var(--border);border-radius:16px;padding:14px;margin-top:12px;background:rgba(255,255,255,0.03);}
 .chip{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;margin:3px;}
@@ -126,7 +128,7 @@ th{color:var(--gold);font-weight:700;}
 .ai-panel.open{display:flex;}
 .ai-header{padding:12px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);}
 .ai-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
-.ai-msg{padding:9px 12px;border-radius:14px;font-size:.82rem;max-width:85%;}
+.ai-msg{padding:9px 12px;border-radius:14px;font-size:.82rem;max-width:85%;word-wrap:break-word;overflow-wrap:break-word;}
 .ai-msg.user{align-self:flex-start;background:rgba(255,214,10,0.14);}
 .ai-msg.bot{align-self:flex-end;background:rgba(255,255,255,0.06);}
 .ai-fab{position:fixed;left:16px;bottom:16px;z-index:49;border-radius:100px;padding:13px 20px;display:flex;align-items:center;gap:8px;cursor:pointer;}
@@ -622,6 +624,7 @@ function renderVessels(){
       <div class="row" style="justify-content:space-between;">
         <div><b style="font-size:1.05rem;">${esc(v.name)}</b> <span class="muted">— حمولة: ${esc(v.cargo||'-')}</span></div>
         <div class="row">
+          <button class="btn-ghost btn-sm" onclick="openEditVesselModal('${v.id}')">تعديل</button>
           <button class="btn-danger btn-sm" onclick="deleteVessel('${v.id}')">حذف</button>
         </div>
       </div>
@@ -629,6 +632,7 @@ function renderVessels(){
       <div class="notice">يرجى العلم أن وقت الوصول المتوقع للمركب مؤقت وعرضة للتغيير. لا ينبغي الاعتماد عليه كلياً في التخطيط.</div>
     </div>`).join('');
 }
+
 function addVessel(){
   const name = document.getElementById('vName').value.trim();
   const eta = document.getElementById('vEta').value;
@@ -639,6 +643,25 @@ function addVessel(){
   log('مركب','إضافة',null,v);
   saveState(); renderTab();
 }
+
+function openEditVesselModal(id){
+  const v = state.vessels.find(x => x.id === id);
+  if(!v) return;
+  const newName = prompt('تعديل اسم المركب:', v.name);
+  if(newName === null) return;
+  const newEta = prompt('تعديل وقت الوصول (ETA):', v.eta);
+  if(newEta === null) return;
+  const newCargo = prompt('تعديل الحمولة:', v.cargo);
+  if(newCargo === null) return;
+
+  v.name = newName.trim() || v.name;
+  v.eta = newEta.trim();
+  v.cargo = newCargo.trim();
+  log('مركب', 'تعديل', null, v);
+  saveState();
+  renderTab();
+}
+
 function deleteVessel(id){
   const v = state.vessels.find(x=>x.id===id);
   if(!confirm('حذف هذا المركب؟')) return;
@@ -782,15 +805,18 @@ function viewRoster(){
     </div>
     <div class="g4">
       <div class="field" style="margin-bottom:0;">
-        <label>ونّاش (اكتب اسمه مباشرة)</label>
-        <input id="otOpName" placeholder="اكتب اسم الوناش...">
+        <label>اختر الوناش</label>
+        <select id="otOpName">
+          <option value="">-- اختر ونّاش --</option>
+          ${state.crew.operators.map(o=>`<option value="${esc(o.name)}">${esc(o.name)}</option>`).join('')}
+        </select>
       </div>
       <div class="field" style="margin-bottom:0;">
         <label>رقم الونش</label>
-        <input id="otCraneNum" list="masterCranesList" placeholder="مثال: 110">
-        <datalist id="masterCranesList">
-          ${(state.crew.cranes||[]).map(c=>`<option value="${esc(c.number)}">`).join('')}
-        </datalist>
+        <select id="otCraneNum">
+          <option value="">-- اختر الونش --</option>
+          ${(state.crew.cranes||[]).map(c=>`<option value="${esc(c.number)}">ونش ${esc(c.number)}</option>`).join('')}
+        </select>
       </div>
       <div class="field" style="margin-bottom:0;">
         <label>نوع المهمة</label>
@@ -816,7 +842,7 @@ function addOtherTask(date){
   const opName = document.getElementById('otOpName').value.trim();
   const craneNum = document.getElementById('otCraneNum').value.trim();
   const type = document.getElementById('otType').value;
-  if(!opName || !craneNum){ alert('من فضلك اكتب اسم الوناش وحدد رقم الونش أولاً'); return; }
+  if(!opName || !craneNum){ alert('من فضلك اختر اسم الوناش ورقم الونش أولاً'); return; }
   
   let op = state.crew.operators.find(o => o.name.trim().toLowerCase() === opName.toLowerCase());
   if(!op){
@@ -881,12 +907,18 @@ function renderRosterVessels(date){
       <div class="card" style="background:rgba(255,255,255,0.03); padding:12px; margin-bottom:12px; border:1px dashed var(--border);">
         <div class="g3" style="align-items:flex-end;">
           <div class="field" style="margin-bottom:0;">
-            <label>اختر أو اكتب رقم الونش</label>
-            <input id="craneNum-${esc(rv.id)}" list="masterCranesList" placeholder="مثال: 110">
+            <label>اختر رقم الونش</label>
+            <select id="craneNum-${esc(rv.id)}">
+              <option value="">-- اختر الونش --</option>
+              ${(state.crew.cranes||[]).map(c=>`<option value="${esc(c.number)}">ونش ${esc(c.number)}</option>`).join('')}
+            </select>
           </div>
           <div class="field" style="margin-bottom:0;">
-            <label>رقم/اسم العنبر (Hold)</label>
-            <input id="craneHold-${esc(rv.id)}" placeholder="مثال: عنبر 2">
+            <label>رقم العنبر (من 1 إلى 9)</label>
+            <select id="craneHold-${esc(rv.id)}">
+              <option value="">-- اختر العنبر --</option>
+              ${[1,2,3,4,5,6,7,8,9].map(n=>`<option value="${n}">عنبر ${n}</option>`).join('')}
+            </select>
           </div>
           <button class="btn-gold btn-sm" style="height:42px;" onclick="addCraneInline('${esc(date)}','${esc(rv.id)}')">+ إضافة الونش للمركب</button>
         </div>
@@ -897,15 +929,15 @@ function renderRosterVessels(date){
 }
 
 function addCraneInline(date, vId){
-  const numInput = document.getElementById(`craneNum-${vId}`);
-  const holdInput = document.getElementById(`craneHold-${vId}`);
-  if(!numInput) return;
+  const numSelect = document.getElementById(`craneNum-${vId}`);
+  const holdSelect = document.getElementById(`craneHold-${vId}`);
+  if(!numSelect) return;
 
-  const craneNumber = numInput.value.trim();
-  const hold = holdInput ? holdInput.value.trim() : '';
+  const craneNumber = numSelect.value.trim();
+  const hold = holdSelect ? holdSelect.value.trim() : '';
 
   if(!craneNumber){
-    alert('من فضلك ادخل أو اختر رقم الونش أولاً');
+    alert('من فضلك اختر رقم الونش أولاً');
     return;
   }
 
@@ -953,11 +985,17 @@ function renderCrane(date,vId,cr){
       <div class="row" style="gap:14px;">
         <div class="field" style="margin-bottom:0;max-width:170px;">
           <label>رقم الونش (Crane)</label>
-          <input value="${esc(cr.craneNumber||'')}" list="masterCranesList" onchange="updateCraneField('${esc(date)}','${esc(vId)}','${esc(cr.id)}','craneNumber',this.value)">
+          <select onchange="updateCraneField('${esc(date)}','${esc(vId)}','${esc(cr.id)}','craneNumber',this.value)">
+            <option value="">-- اختر الونش --</option>
+            ${(state.crew.cranes||[]).map(c=>`<option value="${esc(c.number)}" ${cr.craneNumber===c.number?'selected':''}>ونش ${esc(c.number)}</option>`).join('')}
+          </select>
         </div>
         <div class="field" style="margin-bottom:0;max-width:150px;">
           <label>رقم العنبر (Hold)</label>
-          <input value="${esc(cr.hold||'')}" onchange="updateCraneField('${esc(date)}','${esc(vId)}','${esc(cr.id)}','hold',this.value)">
+          <select onchange="updateCraneField('${esc(date)}','${esc(vId)}','${esc(cr.id)}','hold',this.value)">
+            <option value="">-- اختر --</option>
+            ${[1,2,3,4,5,6,7,8,9].map(n=>`<option value="${n}" ${cr.hold==n?'selected':''}>عنبر ${n}</option>`).join('')}
+          </select>
         </div>
       </div>
       <button class="btn-danger btn-sm" onclick="removeCrane('${esc(date)}','${esc(vId)}','${esc(cr.id)}')">حذف الونش</button>
@@ -975,9 +1013,6 @@ function renderCrane(date,vId,cr){
           <option value="">+ اختر ونّاش من الطاقم</option>
           ${availableOps.filter(o=>!cr.operators.includes(o.id)).map(o=>`<option value="${esc(o.id)}" ${usedIds.has(o.id)?'disabled':''}>${esc(o.name)} ${usedIds.has(o.id)?'(معيّن بالفعل)':''}</option>`).join('')}
         </select>
-        
-        <input id="opManualInput-${esc(cr.id)}" placeholder="أو اكتب اسم وناش جديد هنا مباشرة..." style="max-width:260px;" onkeydown="if(event.key==='Enter') assignManualOperator('${esc(date)}','${esc(vId)}','${esc(cr.id)}')">
-        <button class="btn-gold btn-sm" onclick="assignManualOperator('${esc(date)}','${esc(vId)}','${esc(cr.id)}')">إضافة مباشر</button>
       </div>
     </div>
 
@@ -992,33 +1027,8 @@ function renderCrane(date,vId,cr){
         </select>
         <button class="btn-ghost btn-sm" onclick="assignEquipFromSelect('${esc(date)}','${esc(vId)}','${esc(cr.id)}')">إضافة</button>
       </div>
-      <div class="row" style="margin-top:6px;">
-        <input id="eqManual-${esc(cr.id)}" placeholder="معدة أخرى (إدخال يدوي)">
-        <button class="btn-ghost btn-sm" onclick="assignManualEquip('${esc(date)}','${esc(vId)}','${esc(cr.id)}')">إضافة</button>
-      </div>
     </div>
   </div>`;
-}
-
-function assignManualOperator(date, vId, crId){
-  const input = document.getElementById(`opManualInput-${crId}`);
-  if(!input) return;
-  const name = input.value.trim();
-  if(!name){ alert('يرجى كتابة اسم الوناش أولاً'); return; }
-
-  let op = state.crew.operators.find(o => o.name.trim().toLowerCase() === name.toLowerCase());
-  if(!op){
-    op = { id: uid(), name: name, rating: 'A' };
-    state.crew.operators.push(op);
-  }
-
-  const roster = getRoster(date);
-  const cr = roster.vessels.find(v=>v.id===vId).cranes.find(c=>c.id===crId);
-  if(!cr.operators.includes(op.id)){
-    cr.operators.push(op.id);
-  }
-  
-  saveState(); renderTab();
 }
 
 function removeCrane(date,vId,crId){
@@ -1141,16 +1151,6 @@ function assignEquipFromSelect(date,vId,crId){
   const roster = getRoster(date);
   const cr = roster.vessels.find(v=>v.id===vId).cranes.find(c=>c.id===crId);
   cr.equipment.push({label:(type==='loader'?'لودر ':'شوكة ')+number, refId:id, type});
-  saveState(); renderTab();
-}
-
-function assignManualEquip(date,vId,crId){
-  const inp = document.getElementById(`eqManual-${crId}`);
-  const val = inp.value.trim();
-  if(!val) return;
-  const roster = getRoster(date);
-  const cr = roster.vessels.find(v=>v.id===vId).cranes.find(c=>c.id===crId);
-  cr.equipment.push({label: val+' (مؤقت)', refId:null, type:'manual'});
   saveState(); renderTab();
 }
 
@@ -1653,9 +1653,9 @@ function renderHandoverVessels(){
             <thead>
               <tr>
                 <th>الونش</th>
-                <th>العنبر (يدوي)</th>
+                <th>العنبر (من 1 إلى 9)</th>
                 <th>اللودر</th>
-                <th>قناة الراديو (يدوي)</th>
+                <th>قناة الراديو</th>
                 <th style="width:50px;"></th>
               </tr>
             </thead>
@@ -1669,7 +1669,10 @@ function renderHandoverVessels(){
                     </select>
                   </td>
                   <td>
-                    <input value="${esc(cr.hold||'')}" placeholder="مثال: عنبر 2" oninput="updateHandoverCraneRowField('${esc(v.id)}','${esc(cr.id)}','hold',this.value)">
+                    <select onchange="updateHandoverCraneRowField('${esc(v.id)}','${esc(cr.id)}','hold',this.value)">
+                      <option value="">-- اختر --</option>
+                      ${[1,2,3,4,5,6,7,8,9].map(n=>`<option value="${n}" ${cr.hold==n?'selected':''}>عنبر ${n}</option>`).join('')}
+                    </select>
                   </td>
                   <td>
                     <select onchange="updateHandoverCraneRowField('${esc(v.id)}','${esc(cr.id)}','loaderName',this.value)">
@@ -1847,8 +1850,15 @@ function shareElement(elementId, filename, bgOverride){
   const originalBackground = el.style.background;
   if(bgOverride) el.style.background = bgOverride;
 
-  html2canvas(el, {scale:2, useCORS:true, backgroundColor: bgOverride || null}).then(canvas=>{
-    if(bgOverride) el.style.background = originalBackground;
+  const originalWidth = el.style.width;
+  const originalMaxWidth = el.style.maxWidth;
+  el.style.width = '1200px';
+  el.style.maxWidth = 'none';
+
+  html2canvas(el, {scale:2, useCORS:true, backgroundColor: bgOverride || null, windowWidth: 1400}).then(canvas=>{
+    el.style.background = originalBackground;
+    el.style.width = originalWidth;
+    el.style.maxWidth = originalMaxWidth;
     
     canvas.toBlob(blob=>{
       if(!blob){ alert('تعذر توليد الصورة'); return; }
@@ -1862,7 +1872,9 @@ function shareElement(elementId, filename, bgOverride){
       }
     });
   }).catch(err=>{
-    if(bgOverride) el.style.background = originalBackground;
+    el.style.background = originalBackground;
+    el.style.width = originalWidth;
+    el.style.maxWidth = originalMaxWidth;
     console.error(err);
     alert('حدث خطأ أثناء تصدير الصورة');
   });
